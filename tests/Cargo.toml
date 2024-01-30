@@ -1,0 +1,9 @@
+[package]
+name = "tests"
+version = "0.0.0"
+homepage = "https://github.com/thurn/vow"
+description = "Tests for vow"
+license = "Apache-2.0"
+edition = "2021"
+
+[dependencies]

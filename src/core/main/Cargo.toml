@@ -1,0 +1,19 @@
+[package]
+name = "main"
+version = "0.0.0"
+homepage = "https://github.com/thurn/vow"
+description = "Vow: A contractually-correct lisp"
+license = "Apache-2.0"
+default-run = "vow"
+edition = "2021"
+
+[[bin]]
+name = "vow"
+path = "src/main.rs"
+test = false
+doctest = false
+
+[dependencies]
+
+[dev-dependencies]
+rusty-hook = "0.11.2"

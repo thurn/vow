@@ -1,0 +1,11 @@
+cargo-features = ["named-profiles"]
+
+[workspace]
+members = ["src/core/*",  "tests"]
+resolver = "2"
+
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.release]
+lto = true
