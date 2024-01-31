@@ -14,6 +14,7 @@ test = false
 doctest = false
 
 [dependencies]
+repl = { path = "../repl", version = "0.0.0" }
 
 [dev-dependencies]
 rusty-hook = "0.11.2"

@@ -12,12 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Vow: A contractually-correct lisp
+use reedline::{DefaultPrompt, Reedline, Signal};
 
-use repl::runner;
+pub fn run() {
+    let mut line_editor = Reedline::create();
+    let prompt = DefaultPrompt::default();
 
-fn main() {
-    println!("Hello, world");
-
-    runner::run();
+    loop {
+        let sig = line_editor.read_line(&prompt);
+        match sig {
+            Ok(Signal::Success(buffer)) => {
+                println!("We processed: {}", buffer);
+            }
+            Ok(Signal::CtrlD) | Ok(Signal::CtrlC) => {
+                println!("\nAborted!");
+                break;
+            }
+            x => {
+                println!("Event: {:?}", x);
+            }
+        }
+    }
 }

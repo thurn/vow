@@ -12,12 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Vow: A contractually-correct lisp
-
-use repl::runner;
-
-fn main() {
-    println!("Hello, world");
-
-    runner::run();
-}
+pub mod runner;
