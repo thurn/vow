@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::f64::consts;
 
 use reedline::{DefaultPrompt, Reedline, Signal};
 
@@ -71,7 +72,24 @@ impl Exp {
     }
 }
 
-type Env = HashMap<Symbol, Exp>;
+#[derive(Default)]
+struct Env {
+    symbols: HashMap<Symbol, Exp>,
+}
+
+impl Env {
+    pub fn insert(&mut self, symbol: impl Into<String>, exp: Exp) {
+        self.symbols.insert(symbol.into(), exp);
+    }
+
+    pub fn insert_fn(&mut self, symbol: impl Into<String>, function: fn(List) -> Exp) {
+        self.insert(symbol, Exp::Function(function))
+    }
+
+    pub fn get(&self, symbol: impl Into<String>) -> Exp {
+        self.symbols.get(&symbol.into()).unwrap().clone()
+    }
+}
 
 fn tokenize(input: String) -> Vec<String> {
     input
@@ -115,17 +133,17 @@ fn atom(token: String) -> Atom {
 }
 
 fn standard_env() -> Env {
-    let mut result = Env::new();
-    result.insert(
-        "+".to_string(),
-        Exp::Function(|list| Exp::num(list[0].as_number() + list[1].as_number())),
-    );
+    let mut result = Env::default();
+    result.insert_fn("+", |list| Exp::num(list[0].as_number() + list[1].as_number()));
+    result.insert_fn("*", |list| Exp::num(list[0].as_number() * list[1].as_number()));
+    result.insert("pi", Exp::Atom(Atom::Number(consts::PI)));
+    result.insert_fn("begin", |list| list[list.len() - 1].clone());
     result
 }
 
 fn eval(x: Exp, env: &mut Env) -> Exp {
     match x {
-        Exp::Atom(Atom::Symbol(s)) => env.get(&s).unwrap().clone(),
+        Exp::Atom(Atom::Symbol(s)) => env.get(s),
         Exp::Atom(Atom::Number(..)) => x,
         Exp::Atom(Atom::Bool(..)) => x,
         Exp::Function(..) => x,
