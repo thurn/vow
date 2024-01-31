@@ -18,17 +18,59 @@ use reedline::{DefaultPrompt, Reedline, Signal};
 
 type Symbol = String;
 type Number = f64;
+type Bool = bool;
+
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum Atom {
     Symbol(Symbol),
     Number(Number),
+    Bool(Bool),
 }
+
 type List = Vec<Exp>;
+
 #[derive(Debug, Clone)]
 enum Exp {
     Atom(Atom),
     List(List),
+    Function(fn(List) -> Exp),
 }
+
+impl Exp {
+    fn num(number: Number) -> Self {
+        Self::Atom(Atom::Number(number))
+    }
+
+    fn as_symbol(&self) -> Symbol {
+        match self {
+            Exp::Atom(Atom::Symbol(s)) => s.clone(),
+            _ => panic!("Expected symbol!"),
+        }
+    }
+
+    fn as_number(&self) -> Number {
+        match self {
+            Exp::Atom(Atom::Number(n)) => *n,
+            _ => panic!("Expected number!"),
+        }
+    }
+
+    fn as_bool(&self) -> Bool {
+        match self {
+            Exp::Atom(Atom::Bool(b)) => *b,
+            _ => panic!("Expected boolean!"),
+        }
+    }
+
+    fn as_fn(&self) -> fn(List) -> Exp {
+        match self {
+            Exp::Function(f) => *f,
+            _ => panic!("Expected function!"),
+        }
+    }
+}
+
 type Env = HashMap<Symbol, Exp>;
 
 fn tokenize(input: String) -> Vec<String> {
@@ -40,11 +82,12 @@ fn tokenize(input: String) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn parse(program: String) -> Exp {
     read_from_tokens(&mut tokenize(program))
 }
 
-fn read_from_tokens(mut tokens: &mut Vec<String>) -> Exp {
+fn read_from_tokens(tokens: &mut Vec<String>) -> Exp {
     if tokens.is_empty() {
         panic!("Unexpected EOF!");
     }
@@ -71,6 +114,46 @@ fn atom(token: String) -> Atom {
     }
 }
 
+fn standard_env() -> Env {
+    let mut result = Env::new();
+    result.insert(
+        "+".to_string(),
+        Exp::Function(|list| Exp::num(list[0].as_number() + list[1].as_number())),
+    );
+    result
+}
+
+fn eval(x: Exp, env: &mut Env) -> Exp {
+    match x {
+        Exp::Atom(Atom::Symbol(s)) => env.get(&s).unwrap().clone(),
+        Exp::Atom(Atom::Number(..)) => x,
+        Exp::Atom(Atom::Bool(..)) => x,
+        Exp::Function(..) => x,
+        Exp::List(list) if list.is_empty() => panic!("Cannot evaluate empty list"),
+        Exp::List(list) if list[0].as_symbol() == *"if" => {
+            let result = if eval(list[1].clone(), env).as_bool() {
+                list[2].clone()
+            } else {
+                list[3].clone()
+            };
+            eval(result, env)
+        }
+        Exp::List(list) if list[0].as_symbol() == *"define" => {
+            let result = eval(list[2].clone(), env);
+            env.insert(list[1].as_symbol(), result.clone());
+            result
+        }
+        Exp::List(list) => {
+            let proc = eval(list[0].clone(), env);
+            let mut args: List = vec![];
+            for x in list.iter().skip(1) {
+                args.push(eval(x.clone(), env));
+            }
+            proc.as_fn()(args)
+        }
+    }
+}
+
 pub fn run() {
     let mut line_editor = Reedline::create();
     let prompt = DefaultPrompt::default();
@@ -84,6 +167,8 @@ pub fn run() {
                 println!("Tokenized: {:?}", tokenized);
                 let parsed = read_from_tokens(&mut tokenized);
                 println!("Parsed: {:?}", parsed);
+                let eval = eval(parsed, &mut standard_env());
+                println!("Result: {:?}", eval);
             }
             Ok(Signal::CtrlD) | Ok(Signal::CtrlC) => {
                 println!("\nAborted!");
