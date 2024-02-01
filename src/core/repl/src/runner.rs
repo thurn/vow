@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::f64::consts;
+use std::sync::{Arc, Mutex};
 
 use reedline::{DefaultPrompt, Reedline, Signal};
 
@@ -74,10 +77,18 @@ impl Exp {
 
 #[derive(Default)]
 struct Env {
+    outer: Arc<Mutex<Env>>,
     symbols: HashMap<Symbol, Exp>,
 }
 
 impl Env {
+    pub fn new(parameters: Vec<Symbol>, arguments: List, outer: Arc<Mutex<Env>>) -> Self {
+        let mut result = Self::default();
+        result.symbols.extend(parameters.iter().cloned().zip(arguments.iter().cloned()));
+        result.outer = outer;
+        result
+    }
+
     pub fn insert(&mut self, symbol: impl Into<String>, exp: Exp) {
         self.symbols.insert(symbol.into(), exp);
     }
@@ -88,6 +99,38 @@ impl Env {
 
     pub fn get(&self, symbol: impl Into<String>) -> Exp {
         self.symbols.get(&symbol.into()).unwrap().clone()
+    }
+
+    pub fn resolve(&self, symbol: impl Into<String>) -> Exp {
+        let s = symbol.into();
+        if self.symbols.contains_key(&s) {
+            self.get(s)
+        } else {
+            self.outer.lock().unwrap().resolve(s)
+        }
+    }
+
+    pub fn find_mut(&mut self, _symbol: impl Into<String>) -> Arc<Mutex<Env>> {
+        todo!("")
+    }
+}
+
+struct Procedure {
+    pub parameters: Vec<Symbol>,
+    pub body: Exp,
+    pub env: Arc<Mutex<Env>>,
+}
+
+impl Procedure {
+    pub fn new(parameters: Vec<Symbol>, body: Exp, env: Arc<Mutex<Env>>) -> Self {
+        Self { parameters, body, env }
+    }
+
+    pub fn invoke(&self, arguments: List) {
+        eval(
+            self.body.clone(),
+            &mut Env::new(self.parameters.clone(), arguments, self.env.clone()),
+        );
     }
 }
 
@@ -143,11 +186,12 @@ fn standard_env() -> Env {
 
 fn eval(x: Exp, env: &mut Env) -> Exp {
     match x {
-        Exp::Atom(Atom::Symbol(s)) => env.get(s),
+        Exp::Atom(Atom::Symbol(s)) => env.resolve(s),
         Exp::Atom(Atom::Number(..)) => x,
         Exp::Atom(Atom::Bool(..)) => x,
         Exp::Function(..) => x,
         Exp::List(list) if list.is_empty() => panic!("Cannot evaluate empty list"),
+        Exp::List(list) if list[0].as_symbol() == *"quote" => list[1].clone(),
         Exp::List(list) if list[0].as_symbol() == *"if" => {
             let result = if eval(list[1].clone(), env).as_bool() {
                 list[2].clone()
@@ -160,6 +204,13 @@ fn eval(x: Exp, env: &mut Env) -> Exp {
             let result = eval(list[2].clone(), env);
             env.insert(list[1].as_symbol(), result.clone());
             result
+        }
+        Exp::List(list) if list[0].as_symbol() == *"set!" => {
+            let _symbol = list[1].clone().as_symbol();
+            let exp = list[2].clone();
+
+            // env.find_mut(symbol.clone()).insert(symbol, evaluated.clone());
+            eval(exp, env)
         }
         Exp::List(list) => {
             let proc = eval(list[0].clone(), env);
