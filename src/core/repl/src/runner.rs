@@ -269,6 +269,36 @@ fn standard_env() -> Env {
                 .collect(),
         )
     });
+    result.insert_fn("max", |_, list| {
+        Exp::num(
+            list.iter()
+                .map(|exp| exp.as_number())
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .expect("Expected non-empty list"),
+        )
+    });
+    result.insert_fn("min", |_, list| {
+        Exp::num(
+            list.iter()
+                .map(|exp| exp.as_number())
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .expect("Expected non-empty list"),
+        )
+    });
+    result.insert_fn("not", |_, list| Exp::bool(!list[0].as_bool()));
+    result.insert_fn("null?", |_, list| Exp::bool(list[0].as_exp_list().is_empty()));
+    result
+        .insert_fn("number?", |_, list| Exp::bool(matches!(list[0], Exp::Atom(Atom::Number(..)))));
+    result.insert_fn("print", |_, list| {
+        println!("{:?}", list);
+        Exp::List(vec![])
+    });
+    result.insert_fn("procedure?", |_, list| {
+        Exp::bool(matches!(list[0], Exp::Function(..) | Exp::Procedure(..)))
+    });
+    result.insert_fn("round", |_, list| Exp::num(list[0].as_number().round()));
+    result
+        .insert_fn("symbol?", |_, list| Exp::bool(matches!(list[0], Exp::Atom(Atom::Symbol(..)))));
     result.insert("pi", Exp::Atom(Atom::Number(consts::PI)));
     result
 }
