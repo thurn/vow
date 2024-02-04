@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 reedline = "0.28.0"
+slotmap = "1.0.7"
