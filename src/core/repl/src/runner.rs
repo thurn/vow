@@ -26,7 +26,7 @@ type Number = f64;
 type Bool = bool;
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Atom {
     Symbol(Symbol),
     Number(Number),
@@ -92,6 +92,16 @@ impl Exp {
             Exp::Function(f) => f(env_tree, args),
             Exp::Procedure(p) => p.invoke(env_tree, args),
             _ => panic!("Expected function!"),
+        }
+    }
+}
+
+impl PartialEq for Exp {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Exp::Atom(a), Exp::Atom(b)) => a == b,
+            (Exp::List(a), Exp::List(b)) => a == b,
+            _ => false,
         }
     }
 }
@@ -243,6 +253,20 @@ fn standard_env() -> Env {
     result.insert_fn("cons", |_, list| {
         Exp::List(
             iter::once(list[0].clone()).chain(list[1].as_exp_list().iter().cloned()).collect(),
+        )
+    });
+    result.insert_fn("expt", |_, list| Exp::num(list[0].as_number().powf(list[1].as_number())));
+    result.insert_fn("equal?", |_, list| Exp::bool(list[0] == list[1]));
+    result.insert_fn("length", |_, list| Exp::num(list[0].as_exp_list().len() as f64));
+    result.insert_fn("list", |_, list| Exp::List(list));
+    result.insert_fn("list?", |_, list| Exp::bool(matches!(list[0], Exp::List(..))));
+    result.insert_fn("map", |env_tree, list| {
+        Exp::List(
+            list[1]
+                .as_exp_list()
+                .iter()
+                .map(|exp| list[0].invoke(env_tree, vec![exp.clone()]))
+                .collect(),
         )
     });
     result.insert("pi", Exp::Atom(Atom::Number(consts::PI)));
