@@ -83,6 +83,7 @@ impl Exp {
     fn as_bool(&self) -> Bool {
         match self {
             Exp::Atom(Atom::Bool(b)) => *b,
+            Exp::List(list) => !list.is_empty(),
             _ => panic!("Expected boolean!"),
         }
     }
@@ -248,8 +249,10 @@ fn standard_env() -> Env {
         list[0].invoke(env_tree, list.iter().skip(1).cloned().collect())
     });
     result.insert_fn("begin", |_, list| list[list.len() - 1].clone());
-    result.insert_fn("car", |_, list| list[0].clone());
-    result.insert_fn("cdr", |_, list| Exp::List(list.iter().skip(1).cloned().collect()));
+    result.insert_fn("car", |_, list| list[0].as_exp_list()[0].clone());
+    result.insert_fn("cdr", |_, list| {
+        Exp::List(list[0].as_exp_list().iter().skip(1).cloned().collect())
+    });
     result.insert_fn("cons", |_, list| {
         Exp::List(
             iter::once(list[0].clone()).chain(list[1].as_exp_list().iter().cloned()).collect(),
