@@ -59,6 +59,13 @@ impl Exp {
         }
     }
 
+    fn is_symbol(&self, symbol: impl Into<String>) -> bool {
+        match self {
+            Exp::Atom(Atom::Symbol(s)) => *s == symbol.into(),
+            _ => false,
+        }
+    }
+
     fn as_exp_list(&self) -> Vec<Exp> {
         match self {
             Exp::List(list) => list.clone(),
@@ -314,8 +321,8 @@ fn eval(x: Exp, env_tree: &mut EnvTree, env_id: EnvId) -> Exp {
         Exp::Function(..) => x,
         Exp::Procedure(..) => x,
         Exp::List(list) if list.is_empty() => panic!("Cannot evaluate empty list"),
-        Exp::List(list) if list[0].as_symbol() == *"quote" => list[1].clone(),
-        Exp::List(list) if list[0].as_symbol() == *"if" => {
+        Exp::List(list) if list[0].is_symbol("quote") => list[1].clone(),
+        Exp::List(list) if list[0].is_symbol("if") => {
             let result = if eval(list[1].clone(), env_tree, env_id).as_bool() {
                 list[2].clone()
             } else {
@@ -323,12 +330,12 @@ fn eval(x: Exp, env_tree: &mut EnvTree, env_id: EnvId) -> Exp {
             };
             eval(result, env_tree, env_id)
         }
-        Exp::List(list) if list[0].as_symbol() == *"define" => {
+        Exp::List(list) if list[0].is_symbol("define") => {
             let result = eval(list[2].clone(), env_tree, env_id);
             env_tree.get_mut(env_id).unwrap().insert(list[1].as_symbol(), result.clone());
             result
         }
-        Exp::List(list) if list[0].as_symbol() == *"set!" => {
+        Exp::List(list) if list[0].is_symbol("set!") => {
             let symbol = list[1].clone().as_symbol();
             let exp = list[2].clone();
             let evaluated = eval(exp, env_tree, env_id);
@@ -336,9 +343,11 @@ fn eval(x: Exp, env_tree: &mut EnvTree, env_id: EnvId) -> Exp {
             env_tree.get_mut(target_id).unwrap().insert(symbol, evaluated);
             Exp::Atom(Atom::Bool(true))
         }
-        Exp::List(list) if list[0].as_symbol() == *"lambda" => Exp::Procedure(Box::new(
-            Procedure::new(list[1].as_symbol_list(), list[2].clone(), env_id),
-        )),
+        Exp::List(list) if list[0].is_symbol("lambda") => Exp::Procedure(Box::new(Procedure::new(
+            list[1].as_symbol_list(),
+            list[2].clone(),
+            env_id,
+        ))),
         Exp::List(list) => {
             let proc = eval(list[0].clone(), env_tree, env_id);
             let mut args: List = vec![];
