@@ -246,8 +246,8 @@ fn standard_env() -> Env {
     result.insert_fn("/", |_, list| Exp::num(list[0].as_number() / list[1].as_number()));
     result.insert_fn("<=", |_, list| Exp::bool(list[0].as_number() <= list[1].as_number()));
     result.insert_fn(">=", |_, list| Exp::bool(list[0].as_number() >= list[1].as_number()));
-    result.insert_fn("<", |_, list| Exp::bool(list[0].as_number() >= list[1].as_number()));
-    result.insert_fn(">", |_, list| Exp::bool(list[0].as_number() >= list[1].as_number()));
+    result.insert_fn("<", |_, list| Exp::bool(list[0].as_number() < list[1].as_number()));
+    result.insert_fn(">", |_, list| Exp::bool(list[0].as_number() > list[1].as_number()));
     result.insert_fn("abs", |_, list| Exp::num(list[0].as_number().abs()));
     result.insert_fn("append", |_, list| {
         Exp::List(list.iter().flat_map(|x| x.as_exp_list()).collect())
@@ -266,6 +266,7 @@ fn standard_env() -> Env {
         )
     });
     result.insert_fn("expt", |_, list| Exp::num(list[0].as_number().powf(list[1].as_number())));
+    result.insert_fn("=", |_, list| Exp::bool(list[0].as_number() == list[1].as_number()));
     result.insert_fn("equal?", |_, list| Exp::bool(list[0] == list[1]));
     result.insert_fn("length", |_, list| Exp::num(list[0].as_exp_list().len() as f64));
     result.insert_fn("list", |_, list| Exp::List(list));
@@ -369,11 +370,8 @@ pub fn run() {
         let sig = line_editor.read_line(&prompt);
         match sig {
             Ok(Signal::Success(buffer)) => {
-                println!("Got: {}", buffer);
                 let mut tokenized = tokenize(buffer);
-                println!("Tokenized: {:?}", tokenized);
                 let parsed = read_from_tokens(&mut tokenized);
-                println!("Parsed: {:?}", parsed);
                 let eval = eval(parsed, &mut env_tree, standard_env_id);
                 println!("Result: {:?}", eval);
             }
