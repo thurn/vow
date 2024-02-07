@@ -16,9 +16,11 @@
 
 use std::collections::HashMap;
 use std::f64::consts;
+use std::io::{BufRead, BufReader, Read};
 use std::iter;
 
 use reedline::{DefaultPrompt, Reedline, Signal};
+use regex::Regex;
 use slotmap::{DefaultKey, SlotMap};
 
 type Symbol = String;
@@ -360,20 +362,59 @@ fn eval(x: Exp, env_tree: &mut EnvTree, env_id: EnvId) -> Exp {
     }
 }
 
+struct InPort<T: Read> {
+    pub file: BufReader<T>,
+    pub line: String,
+}
+
+impl<T: Read> InPort<T> {
+    pub fn next_token(&mut self) -> Option<String> {
+        loop {
+            if self.line.is_empty() {
+                let mut line = String::new();
+                let result = self.file.read_line(&mut line).expect("Error reading line");
+                if result == 0 {
+                    return None;
+                }
+                self.line = line;
+            }
+            let re = Regex::new(r#"\s*(,@|[('`,)]|"(?:[\\].|[^\\"])*"|;.*|[^\s('"`,;)]*)(.*)"#)
+                .expect("valid regex");
+            let captures = re.captures(&self.line).expect("captures");
+            let token = captures.get(1).expect("token capture").as_str().to_string();
+            let line = captures.get(2).expect("line capture");
+            self.line = line.as_str().to_string();
+            if !token.is_empty() && !token.starts_with(';') {
+                return Some(token);
+            }
+        }
+    }
+}
+
 pub fn run() {
     let mut line_editor = Reedline::create();
     let prompt = DefaultPrompt::default();
-    let mut env_tree = EnvTree::default();
-    let standard_env_id = env_tree.insert(standard_env());
+    // let mut env_tree = EnvTree::default();
+    // let standard_env_id = env_tree.insert(standard_env());
 
     loop {
         let sig = line_editor.read_line(&prompt);
         match sig {
             Ok(Signal::Success(buffer)) => {
-                let mut tokenized = tokenize(buffer);
-                let parsed = read_from_tokens(&mut tokenized);
-                let eval = eval(parsed, &mut env_tree, standard_env_id);
-                println!("Result: {:?}", eval);
+                let input = BufReader::new(buffer.as_bytes());
+                let mut port = InPort { file: input, line: "".to_string() };
+                loop {
+                    let token = port.next_token();
+                    if token.is_none() {
+                        break;
+                    }
+                    eprintln!("Token: {token:?}");
+                }
+
+                // let mut tokenized = tokenize(buffer);
+                // let parsed = read_from_tokens(&mut tokenized);
+                // let eval = eval(parsed, &mut env_tree, standard_env_id);
+                // println!("Result: {:?}", eval);
             }
             Ok(Signal::CtrlD) | Ok(Signal::CtrlC) => {
                 println!("\nAborted!");

@@ -4,5 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+num-complex = "0.4.4"
 reedline = "0.28.0"
+regex = "1.10.3"
 slotmap = "1.0.7"
