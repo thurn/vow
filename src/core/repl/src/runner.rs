@@ -18,7 +18,9 @@ use std::collections::HashMap;
 use std::f64::consts;
 use std::io::{BufRead, BufReader, Read};
 use std::iter;
+use std::str::FromStr;
 
+use num_complex::Complex64;
 use reedline::{DefaultPrompt, Reedline, Signal};
 use regex::Regex;
 use slotmap::{DefaultKey, SlotMap};
@@ -32,7 +34,9 @@ type Bool = bool;
 enum Atom {
     Symbol(Symbol),
     Number(Number),
+    Complex(Complex64),
     Bool(Bool),
+    String(String),
 }
 
 type List = Vec<Exp>;
@@ -199,20 +203,6 @@ impl Procedure {
     }
 }
 
-fn tokenize(input: String) -> Vec<String> {
-    input
-        .replace('(', " ( ")
-        .replace(')', " ) ")
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect()
-}
-
-#[allow(dead_code)]
-fn parse(program: String) -> Exp {
-    read_from_tokens(&mut tokenize(program))
-}
-
 fn read_from_tokens(tokens: &mut Vec<String>) -> Exp {
     if tokens.is_empty() {
         panic!("Unexpected EOF!");
@@ -229,14 +219,6 @@ fn read_from_tokens(tokens: &mut Vec<String>) -> Exp {
         panic!("Unexpected ')'!");
     } else {
         Exp::Atom(atom(token))
-    }
-}
-
-fn atom(token: String) -> Atom {
-    if let Ok(n) = token.parse::<f64>() {
-        Atom::Number(n)
-    } else {
-        Atom::Symbol(token)
     }
 }
 
@@ -320,7 +302,9 @@ fn eval(x: Exp, env_tree: &mut EnvTree, env_id: EnvId) -> Exp {
     match x {
         Exp::Atom(Atom::Symbol(s)) => env_tree.get(env_id).unwrap().resolve(env_tree, s),
         Exp::Atom(Atom::Number(..)) => x,
+        Exp::Atom(Atom::Complex(..)) => x,
         Exp::Atom(Atom::Bool(..)) => x,
+        Exp::Atom(Atom::String(..)) => x,
         Exp::Function(..) => x,
         Exp::Procedure(..) => x,
         Exp::List(list) if list.is_empty() => panic!("Cannot evaluate empty list"),
@@ -391,11 +375,84 @@ impl<T: Read> InPort<T> {
     }
 }
 
+fn in_quotes(s: &str) -> bool {
+    s == "'" || s == "`" || s == "," || s == ",@"
+}
+
+fn read_ahead<T: Read>(port: &mut InPort<T>, token: String) -> Exp {
+    if token == "(" {
+        let mut list: Vec<Exp> = vec![];
+        loop {
+            let Some(next) = port.next_token() else { panic!("End of Input") };
+            if next == ")" {
+                return Exp::List(list);
+            } else {
+                list.push(read_ahead(port, next));
+            }
+        }
+    } else if token == ")" {
+        panic!("Unexpected ')");
+    } else if in_quotes(&token) {
+        let Some(result) = read(port) else {
+            panic!("Unexpected EOF");
+        };
+        Exp::List(vec![Exp::Atom(Atom::Symbol(token)), result])
+    } else {
+        Exp::Atom(atom(token))
+    }
+}
+
+fn read<T: Read>(port: &mut InPort<T>) -> Option<Exp> {
+    port.next_token().map(|t| read_ahead(port, t))
+}
+
+fn atom(token: String) -> Atom {
+    if token == "#t" {
+        return Atom::Bool(true);
+    }
+
+    if token == "#f" {
+        return Atom::Bool(false);
+    }
+
+    if token.starts_with('"') {
+        return Atom::String(token[1..=token.len() - 1].to_string());
+    }
+
+    if let Ok(n) = token.parse::<f64>() {
+        Atom::Number(n)
+    } else if let Ok(n) = Complex64::from_str(&token) {
+        Atom::Complex(n)
+    } else {
+        Atom::Symbol(token)
+    }
+}
+
+fn to_string(x: &Exp) -> String {
+    match x {
+        Exp::Atom(Atom::Bool(true)) => "#t".to_string(),
+        Exp::Atom(Atom::Bool(false)) => "#f".to_string(),
+        Exp::Atom(Atom::Symbol(s)) => s.clone(),
+        Exp::Atom(Atom::Number(n)) => format!("{n}"),
+        Exp::Atom(Atom::Complex(n)) => format!("{n}"),
+        Exp::Atom(Atom::String(s)) => format!("\"{s}\""),
+        Exp::List(list) => {
+            format!("({})", list.iter().map(to_string).collect::<Vec<_>>().join(" "))
+        }
+        Exp::Function(_) => "<function>".to_string(),
+        Exp::Procedure(_) => "<procedure>".to_string(),
+    }
+}
+
+fn parse<T: Read>(input: &mut InPort<T>) -> Option<Exp> {
+    read(input)
+}
+
 pub fn run() {
     let mut line_editor = Reedline::create();
     let prompt = DefaultPrompt::default();
-    // let mut env_tree = EnvTree::default();
-    // let standard_env_id = env_tree.insert(standard_env());
+    let mut env_tree = EnvTree::default();
+    let standard_env_id = env_tree.insert(standard_env());
 
     loop {
         let sig = line_editor.read_line(&prompt);
@@ -404,17 +461,17 @@ pub fn run() {
                 let input = BufReader::new(buffer.as_bytes());
                 let mut port = InPort { file: input, line: "".to_string() };
                 loop {
-                    let token = port.next_token();
-                    if token.is_none() {
-                        break;
+                    let x = parse(&mut port);
+                    match x {
+                        None => {
+                            break;
+                        }
+                        Some(exp) => {
+                            let result = eval(exp, &mut env_tree, standard_env_id);
+                            println!("{}", to_string(&result))
+                        }
                     }
-                    eprintln!("Token: {token:?}");
                 }
-
-                // let mut tokenized = tokenize(buffer);
-                // let parsed = read_from_tokens(&mut tokenized);
-                // let eval = eval(parsed, &mut env_tree, standard_env_id);
-                // println!("Result: {:?}", eval);
             }
             Ok(Signal::CtrlD) | Ok(Signal::CtrlC) => {
                 println!("\nAborted!");
